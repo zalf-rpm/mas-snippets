@@ -1,0 +1,6 @@
+go 1.19
+
+use (
+	./net-cdf-gw
+	./snippetlib
+)

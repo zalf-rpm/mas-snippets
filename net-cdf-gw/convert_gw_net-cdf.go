@@ -1,23 +1,25 @@
 package main
 
 import (
-	"encoding/csv"
 	"flag"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
 	"log"
 	"math"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/batchatco/go-native-netcdf/netcdf"
 	"github.com/batchatco/go-native-netcdf/netcdf/api"
+	"github.com/mazznoer/colorgrad"
 )
 
 func main() {
 
 	//inputFile := flag.String("input", "OCEANIA_WTD_monthlymeans.nc", "Input file")
-	inputFile := flag.String("input", "OCEANIA_WTD_annualmean.nc", "Input file")
+	inputFile := flag.String("input", "EURASIA_WTD_annualmean.nc", "Input file")
 	startTime := flag.String("start", "2000-01-01", "Start time")
 	endTime := flag.String("end", "2010-12-31", "End time")
 
@@ -187,14 +189,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	createGWTimeSeries(&nc, start, end)
+	createGWTimeSeries(&nc, start, end, *inputFile+".png")
 }
 
 // a Hermes ground water time series
 // create mapping csv file (lat, lon, gwId)
 // ground water time series file (gwId, date, value)
 // requires input time range  (start, end)
-func createGWTimeSeries(nc *api.Group, start, end time.Time) {
+func createGWTimeSeries(nc *api.Group, start, end time.Time, imgFileName string) {
 
 	// get lat, lon, gwId
 	type gwMapping struct {
@@ -234,20 +236,20 @@ func createGWTimeSeries(nc *api.Group, start, end time.Time) {
 		log.Fatal(err)
 	}
 	lenLat := latVar.Len()
-	valsLat, err := latVar.Values()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// valsLat, err := latVar.Values()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 	// longitude
 	lonVar, err := (*nc).GetVarGetter("lon")
 	if err != nil {
 		log.Fatal(err)
 	}
 	lenLon := lonVar.Len()
-	valsLon, err := lonVar.Values()
-	if err != nil {
-		log.Fatal(err)
-	}
+	// valsLon, err := lonVar.Values()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
 
 	// ground water
 	WTDVar, err := (*nc).GetVarGetter("WTD")
@@ -277,77 +279,132 @@ func createGWTimeSeries(nc *api.Group, start, end time.Time) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// out map for mapping csv file (lat, lon, gwId)
-	latLonMappings := make([]gwMapping, 0, lenLat*lenLon)
+	// // out map for mapping csv file (lat, lon, gwId)
+	// latLonMappings := make([]gwMapping, 0, lenLat*lenLon)
 
-	// out map for time series csv file (gwId, date, value)
-	uniqueGWId := make(map[string][]float64)
+	// // out map for time series csv file (gwId, date, value)
+	// uniqueGWId := make(map[string][]float64)
 
-	counter := 0
+	gwValues := make([][]float64, lenLat)
+	min, max := 0.0, 0.0
+	init := false
+	// counter := 0
 	// loop through lat, lon, mask, time and get WTD
 	for iLat := int64(0); iLat < lenLat; iLat++ {
+		gwValues[iLat] = make([]float64, lenLon)
 		for iLon := int64(0); iLon < lenLon; iLon++ {
-			if counter > 100 {
-				break
-			}
 			// check against mask (1 = valid, 0 = invalid)
 			if valsMask.([][]int8)[iLat][iLon] == 1 {
 				// create gwId with 12 digits for wtd values
-				gwIdValues := make([]string, len(timeValues))
+				//gwIdValues := make([]string, len(timeValues))
 				timeSlice := make([]float64, len(timeValues))
-				valid := true
+				// valid := true
 				for iTime := 0; iTime < len(timeValues); iTime++ {
 					value := valWTD[iTime][iLat][iLon]
 					timeSlice[iTime] = math.Ceil((float64(value)*scaleFactor + add_offset))
-					gwIdValues[iTime] = fmt.Sprintf("%01.2f", timeSlice[iTime])
+					//gwIdValues[iTime] = fmt.Sprintf("%01.2f", timeSlice[iTime])
+
+					if !init {
+						min = timeSlice[iTime]
+						max = timeSlice[iTime]
+						init = true
+					}
+					if timeSlice[iTime] < min {
+						min = timeSlice[iTime]
+					}
+					if timeSlice[iTime] > max {
+						max = timeSlice[iTime]
+					}
+					gwValues[iLat][iLon] = timeSlice[iTime]
+
+					//img.Set(int(iLon), int(lenLat-iLat), ToColor(timeSlice[iTime]))
 					// if timeSlice[iTime] > 100 {
 					// 	// 	fmt.Println("value", value)
 					// 	valid = false
 					// 	break
 					// }
 				}
-				if !valid {
-					continue
-				}
+				// if !valid {
+				// 	continue
+				// }
 
-				gwId := strings.Join(gwIdValues, "")
-				if _, ok := uniqueGWId[gwId]; !ok {
-					uniqueGWId[gwId] = timeSlice
-					counter++
-				}
-				latLonMappings = append(latLonMappings, gwMapping{gwId: len(uniqueGWId), lat: valsLat.([]float32)[iLat], lon: valsLon.([]float32)[iLon]})
+				// gwId := strings.Join(gwIdValues, "")
+				// if _, ok := uniqueGWId[gwId]; !ok {
+				// 	uniqueGWId[gwId] = timeSlice
+				// 	counter++
+				// }
+				// latLonMappings = append(latLonMappings, gwMapping{gwId: len(uniqueGWId), lat: valsLat.([]float32)[iLat], lon: valsLon.([]float32)[iLon]})
+			} else {
+				gwValues[iLat][iLon] = 2 // invalid
+				//img.Set(int(iLon), int(lenLat-iLat), color.RGBA{188, 190, 198, 0xff})
 			}
-
 		}
 	}
-
-	// write mapping csv file
-	f, err := os.Create("gw_mapping.csv")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-	w := csv.NewWriter(f)
-	w.Write([]string{"gwId", "lat", "lon"})
-	for _, mapping := range latLonMappings {
-		w.Write([]string{fmt.Sprintf("%d", mapping.gwId), fmt.Sprintf("%f", mapping.lat), fmt.Sprintf("%f", mapping.lon)})
-	}
-	w.Flush()
-	if err := w.Error(); err != nil {
-		log.Fatal(err)
-	}
-	// write time series csv file
-	f, err = os.Create("gw_time_series.csv")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-	w = csv.NewWriter(f)
-	w.Write([]string{"gwId", "date", "value"})
-	for gwId, timeSlice := range uniqueGWId {
-		for iTime, value := range timeSlice {
-			w.Write([]string{gwId, fmt.Sprintf("%1.f", timeValues[iTime]), fmt.Sprintf("%1.2f", value)})
+	//valRange := math.Abs(max - min)
+	img := generatePic(int(lenLon), int(lenLat))
+	grad := colorgrad.Viridis()
+	for iLat := int64(0); iLat < lenLat; iLat++ {
+		for iLon := int64(0); iLon < lenLon; iLon++ {
+			img.Set(int(iLon), int(lenLat-iLat), ToColor(gwValues[iLat][iLon], 5, &grad))
 		}
 	}
-	w.Flush()
+	saveImg(img, imgFileName)
+	// // write mapping csv file
+	// f, err := os.Create("gw_mapping.csv")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer f.Close()
+	// w := csv.NewWriter(f)
+	// w.Write([]string{"gwId", "lat", "lon"})
+	// for _, mapping := range latLonMappings {
+	// 	w.Write([]string{fmt.Sprintf("%d", mapping.gwId), fmt.Sprintf("%f", mapping.lat), fmt.Sprintf("%f", mapping.lon)})
+	// }
+	// w.Flush()
+	// if err := w.Error(); err != nil {
+	// 	log.Fatal(err)
+	// }
+	// // write time series csv file
+	// f, err = os.Create("gw_time_series.csv")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer f.Close()
+	// w = csv.NewWriter(f)
+	// w.Write([]string{"gwId", "date", "value"})
+	// for gwId, timeSlice := range uniqueGWId {
+	// 	for iTime, value := range timeSlice {
+	// 		w.Write([]string{gwId, fmt.Sprintf("%1.f", timeValues[iTime]), fmt.Sprintf("%1.2f", value)})
+	// 	}
+	// }
+	// w.Flush()
+}
+
+func generatePic(width, height int) *image.RGBA {
+
+	upLeft := image.Point{0, 0}
+	lowRight := image.Point{width, height}
+
+	img := image.NewRGBA(image.Rectangle{upLeft, lowRight})
+	return img
+}
+
+func saveImg(img *image.RGBA, imgName string) {
+	// Encode as PNG.
+	f, _ := os.Create(imgName)
+	png.Encode(f, img)
+}
+func ToColor(inVal, valRange float64, grad *colorgrad.Gradient) color.RGBA {
+	val := inVal * (-1)
+	if val < -1 {
+		return color.RGBA{188, 190, 198, 0xff} // blank
+	} else if val > valRange {
+		val = valRange
+	}
+	perc := val / valRange
+	r, g, b := grad.At(perc).RGB255()
+	texture := color.RGBA{r, g, b, 0xff} // blank
+
+	return texture
+
 }
