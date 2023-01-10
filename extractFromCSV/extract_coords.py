@@ -7,7 +7,7 @@ outLatLonFile = "gridcells_latlon.csv"
 
 def writeLookupFile() :
     
-    lookupAlti = dict()
+    lookupGrid = dict()
     with open(outLatLonFile, mode="wt", newline="") as outlookupfile :
         outlookupfile.writelines("GRID_NO,LATITUDE,LONGITUDE,ALTITUDE\n")
         for file in latLonFiles :
@@ -27,6 +27,9 @@ def writeLookupFile() :
                     longi = tokens[header["lon"]].strip()
                     alti = tokens[header["alti"]].strip()
 
+                    if gridIdx in lookupGrid :
+                        continue
+                    lookupGrid[gridIdx] = True
                     outline = [
                         gridIdx,
                         lati,

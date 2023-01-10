@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"encoding/csv"
 	"flag"
 	"fmt"
 	"image"
@@ -354,8 +353,8 @@ func createGWTimeSeries(nc *api.Group, start, end time.Time, imgFileName, maskFi
 			log.Fatal(err)
 		}
 		defer gwOut.Close()
-		w := csv.NewWriter(gwOut)
-		w.Write([]string{"Column,Row,latitude,longitude,groundwater"})
+		w := bufio.NewWriter(gwOut)
+		w.WriteString("Column,Row,latitude,longitude,groundwater\n")
 
 		lookup := make(map[GridCoord]float64)
 		firstLine := true
@@ -416,7 +415,7 @@ func createGWTimeSeries(nc *api.Group, start, end time.Time, imgFileName, maskFi
 				}
 
 				// write mapping to csv file
-				w.Write([]string{fmt.Sprintf("%s,%s,%f,%f,%1.0f", tokens[colID], tokens[rowID], lat, lon, gw)})
+				w.WriteString(fmt.Sprintf("%s,%s,%f,%f,%1.0f\n", tokens[colID], tokens[rowID], lat, lon, gw))
 
 				// print warnings if lat or lon is not the most accurate
 				prevLat := math.Abs(float64(valLat[iLat])-lat) > math.Abs(float64(valLat[iLat-1])-lat)
@@ -445,8 +444,7 @@ func createGWTimeSeries(nc *api.Group, start, end time.Time, imgFileName, maskFi
 				}
 			}
 		}
-		w.Flush()
-		if err := w.Error(); err != nil {
+		if err := w.Flush(); err != nil {
 			log.Fatal(err)
 		}
 
